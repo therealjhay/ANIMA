@@ -15,7 +15,7 @@ npm install && npm run dev
 
 ## Build Phases
 - [x] Phase 0: Scaffold
-- [ ] Phase 1: Wallet Connect
+- [x] Phase 1: Wallet Connect
 - [ ] Phase 2: Smart Contract
 - [ ] Phase 3: Chat UI
 - [ ] Phase 4: Memory Extraction
