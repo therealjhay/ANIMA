@@ -17,6 +17,8 @@ import { useWallet } from "@/hooks/useWallet";
 import { ChatMessage } from "@/components/chat/ChatMessage";
 import { ChatInput } from "@/components/chat/ChatInput";
 import type { Companion, MemoryGraph } from "@/lib/types";
+import { uploadMemoryGraph } from "@/lib/0g/storage";
+import { useUpdateMemory, ANIMA_REGISTRY_ADDRESS, ANIMA_REGISTRY_ABI } from "@/lib/contracts";
 
 // ─── localStorage helpers ────────────────────────────────────────────────────
 
@@ -63,6 +65,7 @@ export default function CompanionChatPage() {
   const [memoryToast, setMemoryToast] = useState<string | null>(null);
   const [storageCID, setStorageCID] = useState<string>("");
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const { writeContractAsync } = useUpdateMemory();
 
   // Load companion from localStorage once wallet connects
   useEffect(() => {
@@ -107,26 +110,41 @@ export default function CompanionChatPage() {
         const { newNodes, storageCID: cid } = await res.json();
 
         if (newNodes && newNodes.length > 0) {
-          setGraph((prev) => {
-            if (!prev) return prev;
-            const updated: MemoryGraph = {
-              ...prev,
-              nodes: [...prev.nodes, ...newNodes],
-              rootHash: "", // updated in Phase 5
-            };
-            const updatedCompanion: Companion = {
-              ...companion,
-              memoryNodeCount: updated.nodes.length,
-            };
-            saveCompanionData(address, companionId, updatedCompanion, updated);
-            setCompanion(updatedCompanion);
-            return updated;
-          });
+          const updatedGraph: MemoryGraph = {
+            ...graph,
+            nodes: [...graph.nodes, ...newNodes],
+            rootHash: "",
+          };
+
+          try {
+            // Upload to 0G storage (mock/real)
+            const uploadedCid = await uploadMemoryGraph(updatedGraph);
+            updatedGraph.rootHash = uploadedCid;
+            setStorageCID(uploadedCid);
+
+            // Attest root hash to smart contract
+            await writeContractAsync({
+              address: ANIMA_REGISTRY_ADDRESS,
+              abi: ANIMA_REGISTRY_ABI,
+              functionName: "updateMemory",
+              args: [BigInt(companionId), uploadedCid, BigInt(updatedGraph.nodes.length)],
+            });
+            console.log("Memory successfully attested to chain!");
+          } catch (err) {
+            console.error("Storage/Attestation error:", err);
+          }
+
+          const updatedCompanion: Companion = {
+            ...companion,
+            memoryNodeCount: updatedGraph.nodes.length,
+          };
+
+          saveCompanionData(address, companionId, updatedCompanion, updatedGraph);
+          setCompanion(updatedCompanion);
+          setGraph(updatedGraph);
 
           setMemoryToast(`💭 ${newNodes.length} memor${newNodes.length > 1 ? "ies" : "y"} updated`);
           setTimeout(() => setMemoryToast(null), 3000);
-
-          if (cid) setStorageCID(cid);
         }
       } catch {
         // Silent fail — memory extraction is non-blocking
