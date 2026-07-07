@@ -21,6 +21,44 @@ export default function Home() {
   const { address, isConnected } = useWallet();
   const [companions, setCompanions] = useState<Companion[]>([]);
 
+  const handleExport = () => {
+    if (!address) return;
+    const raw = localStorage.getItem(getStorageKey(address));
+    if (!raw) return;
+    const blob = new Blob([raw], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `anima-companions-${address.slice(0, 6)}.json`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  };
+
+  const handleImport = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (!address || !e.target.files?.[0]) return;
+    const file = e.target.files[0];
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      try {
+        const importedData = JSON.parse(event.target?.result as string);
+        const key = getStorageKey(address);
+        const existingRaw = localStorage.getItem(key);
+        const existingData = existingRaw ? JSON.parse(existingRaw) : {};
+        const merged = { ...existingData, ...importedData };
+        localStorage.setItem(key, JSON.stringify(merged));
+        
+        setCompanions(Object.values(merged).map((v: any) => v.companion));
+        alert("Companions imported successfully!");
+      } catch (err) {
+        alert("Failed to import companions. Invalid format.");
+      }
+    };
+    reader.readAsText(file);
+    e.target.value = '';
+  };
+
   useEffect(() => {
     if (!isConnected || !address) return;
     try {
@@ -71,6 +109,16 @@ export default function Home() {
           </p>
         </div>
         <div className="flex items-center gap-3">
+          <label className="cursor-pointer text-xs font-semibold px-3 py-1.5 rounded-lg border border-border hover:bg-muted transition-colors">
+            Import
+            <input type="file" accept=".json" className="hidden" onChange={handleImport} />
+          </label>
+          <button 
+            onClick={handleExport}
+            className="text-xs font-semibold px-3 py-1.5 rounded-lg border border-border hover:bg-muted transition-colors"
+          >
+            Export
+          </button>
           <ConnectButton />
           <Link
             href="/create"
